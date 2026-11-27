@@ -21,11 +21,12 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Download 3D Human Character Model
+      - name: Fetch 3D Human Character Model
         run: |
+          git clone --depth 1 https://github.com temp-models
           New-Item -ItemType Directory -Force -Path assets
-          $u = "https://raw." + "://githubusercontent.com"
-          Invoke-WebRequest -Uri $u -OutFile "assets/player.glb"
+          Copy-Item "temp-models/Models/CesiumMan/glTF-Binary/CesiumMan.glb" -Destination "assets/player.glb"
+          Remove-Item -Recurse -Force temp-models
 
       - name: Build Windows EXE
         run: npm run build
