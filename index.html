@@ -168,7 +168,6 @@
     const players = [];
     const clock = new THREE.Clock();
 
-    // Load the Rigged 3D Human Model (assets/player.glb)
     const loader = new THREE.GLTFLoader();
     loader.load('assets/player.glb', (gltf) => {
       const baseModel = gltf.scene;
@@ -176,9 +175,8 @@
 
       function spawn3DPlayer(x, z, team, num, role) {
         const clone = THREE.SkeletonUtils.clone(baseModel);
-        clone.scale.set(1.35, 1.35, 1.35);
+        clone.scale.set(1.6, 1.6, 1.6);
 
-        // Apply Team Kit Colors & Shadows
         clone.traverse((child) => {
           if (child.isMesh) {
             child.castShadow = true;
@@ -188,29 +186,26 @@
         });
 
         const wrapper = new THREE.Group();
-        clone.rotation.y = Math.PI; // Align forward facing
+        clone.rotation.y = Math.PI / 2;
         wrapper.add(clone);
         wrapper.position.set(x, 0, z);
         scene.add(wrapper);
 
         const mixer = new THREE.AnimationMixer(clone);
-        const idleAction = mixer.clipAction(animations[0]);
-        const runAction = mixer.clipAction(animations[1]);
-        idleAction.play();
+        const runAction = mixer.clipAction(animations[0]);
+        runAction.play();
+        runAction.paused = true;
 
         players.push({
           mesh: wrapper,
           mixer,
-          idleAction,
           runAction,
-          isRunning: false,
           homePos: new THREE.Vector3(x, 0, z),
           team,
           label: `#${num} ${role}`
         });
       }
 
-      // Spawn 7v7 Rigged 3D Lineup
       spawn3DPlayer(-4, 0, 'home', '10', 'STRIKER');
       spawn3DPlayer(-10, -13, 'home', '7', 'LEFT WING');
       spawn3DPlayer(-10, 13, 'home', '11', 'RIGHT WING');
@@ -229,15 +224,7 @@
     });
 
     function setPlayerAnim(p, running) {
-      if (p.isRunning === running) return;
-      p.isRunning = running;
-      if (running) {
-        p.idleAction.fadeOut(0.15);
-        p.runAction.reset().fadeIn(0.15).play();
-      } else {
-        p.runAction.fadeOut(0.15);
-        p.idleAction.reset().fadeIn(0.15).play();
-      }
+      p.runAction.paused = !running;
     }
 
     let activeIdx = 0, homeScore = 0, awayScore = 0, stamina = 100, matchSeconds = 0;
