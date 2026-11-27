@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>FC Lite 3D</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; font-family: 'Segoe UI', sans-serif; }
+    body { overflow: hidden; background: #111; }
+    #scoreboard {
+      position: absolute; top: 20px; left: 25px; display: flex; align-items: center;
+      background: rgba(15, 23, 42, 0.9); color: white; border-radius: 6px; overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4); font-weight: 700; font-size: 16px;
+    }
+    .team-box { padding: 8px 16px; display: flex; align-items: center; gap: 8px; }
+    .home-color { border-left: 5px solid #e11d48; background: #f8fafc; color: #0f172a; }
+    .away-color { border-right: 5px solid #2563eb; background: #f8fafc; color: #0f172a; }
+    #score { padding: 8px 14px; font-size: 18px; letter-spacing: 1px; }
+    #timer { background: #1e293b; padding: 8px 12px; font-size: 14px; color: #94a3b8; }
+    #player-hud {
+      position: absolute; bottom: 25px; left: 25px; background: rgba(15, 23, 42, 0.85);
+      padding: 10px 15px; border-radius: 6px; color: white; width: 200px;
+    }
+    #player-name { font-size: 13px; font-weight: bold; margin-bottom: 5px; letter-spacing: 0.5px; }
+    #stamina-bg { width: 100%; height: 8px; background: #334155; border-radius: 4px; overflow: hidden; }
+    #stamina-fill { width: 100%; height: 100%; background: #22c55e; transition: width 0.1s; }
+    #radar {
+      position: absolute; bottom: 25px; right: 25px; width: 180px; height: 110px;
+      background: rgba(15, 23, 42, 0.75); border: 2px solid rgba(255,255,255,0.4); border-radius: 4px;
+    }
+    #controls {
+      position: absolute; top: 20px; right: 25px; color: rgba(255,255,255,0.8);
+      background: rgba(0,0,0,0.5); padding: 8px 12px; border-radius: 6px; font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div id="scoreboard">
+    <div class="team-box home-color">HOME</div>
+    <div id="score">0 - 0</div>
+    <div class="team-box away-color">AWAY</div>
+    <div id="timer">00:00</div>
+  </div>
+  <div id="controls">
+    <b>WASD / Arrows:</b> Move &nbsp;|&nbsp; <b>Space:</b> Kick &nbsp;|&nbsp; <b>Shift:</b> Sprint &nbsp;|&nbsp; <b>Q:</b> Switch
+  </div>
+  <div id="player-hud">
+    <div id="player-name">STRIKER #10</div>
+    <div id="stamina-bg"><div id="stamina-fill"></div></div>
+  </div>
+  <canvas id="radar" width="180" height="110"></canvas>
+  <script src="https://cloudflare.com"></script>
+  <script>
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87ceeb);
+    scene.fog = new THREE.Fog(0x87ceeb, 60, 160);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 300);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "low-power" });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.BasicShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.65));
+    const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    sunLight.position.set(30, 50, 20);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 1024;
+    sunLight.shadow.mapSize.height = 1024;
+    sunLight.shadow.camera.near = 10; sunLight.shadow.camera.far = 120;
+    const d = 45;
+    sunLight.shadow.camera.left = -d; sunLight.shadow.camera.right = d;
+    sunLight.shadow.camera.top = d; sunLight.shadow.camera.bottom = -d;
+    scene.add(sunLight);
+
+    function createPitchTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1024; canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+      const stripes = 16, stripeW = canvas.width / stripes;
+      for (let i = 0; i < stripes; i++) {
+        ctx.fillStyle = i % 2 === 0 ? '#3b8c2a' : '#459e32';
+        ctx.fillRect(i * stripeW, 0, stripeW, canvas.height);
+      }
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(20, 20, canvas.width - 40, canvas.height - 40);
+      ctx.beginPath(); ctx.moveTo(canvas.width / 2, 20); ctx.lineTo(canvas.width / 2, canvas.height - 20); ctx.stroke();
+      ctx.beginPath(); ctx.arc(canvas.width / 2, canvas.height / 2, 65, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeRect(20, 120, 130, canvas.height - 240);
+      ctx.strokeRect(canvas.width - 150, 120, 130, canvas.height - 240);
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    const pitch = new THREE.Mesh(
+      new THREE.PlaneGeometry(80, 50),
+      new THREE.MeshLambertMaterial({ map: createPitchTexture() })
+    );
+    pitch.rotation.x = -Math.PI / 2;
+    pitch.receiveShadow = true;
+    scene.add(pitch);
+
+    const standMat = new THREE.MeshLambertMaterial({ color: 0x64748b });
+    const sNorth = new THREE.Mesh(new THREE.BoxGeometry(92, 10, 12), standMat); sNorth.position.set(0, 5, -33);
+    const sWest = new THREE.Mesh(new THREE.BoxGeometry(12, 10, 78), standMat); sWest.position.set(-48, 5, 0);
+    const sEast = new THREE.Mesh(new THREE.BoxGeometry(12, 10, 78), standMat); sEast.position.set(48, 5, 0);
+    scene.add(sNorth, sWest, sEast);
+
+    function createGoal(xPos) {
+      const group = new THREE.Group();
+      const postMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      const lPost = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 3), postMat); lPost.position.set(0, 1.5, -4.5);
+      const rPost = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 3), postMat); rPost.position.set(0, 1.5, 4.5);
+      const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 9.2), postMat);
+      bar.rotation.x = Math.PI / 2; bar.position.set(0, 3, 0);
+      group.add(lPost, rPost, bar);
+      group.position.set(xPos, 0, 0);
+      scene.add(group);
+    }
+    createGoal(-38.5); createGoal(38.5);
+
+    const ball = new THREE.Mesh(
+      new THREE.SphereGeometry(0.45, 16, 16),
+      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 })
+    );
+    ball.castShadow = true; ball.position.set(0, 0.45, 0);
+    scene.add(ball);
+    let ballVel = new THREE.Vector3(0, 0, 0);
+
+    const marker = new THREE.Mesh(
+      new THREE.ConeGeometry(0.4, 0.7, 3),
+      new THREE.MeshBasicMaterial({ color: 0x22c55e })
+    );
+    marker.rotation.x = Math.PI;
+    scene.add(marker);
+    const players = [];
+    function createPlayer(x, z, team, name) {
+      const group = new THREE.Group();
+      const body = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.45, 0.45, 1.5, 12),
+        new THREE.MeshLambertMaterial({ color: team === 'home' ? 0xe11d48 : 0x2563eb })
+      );
+      body.position.y = 1.0; body.castShadow = true;
+      const head = new THREE.Mesh(
+        new THREE.SphereGeometry(0.35, 12, 12),
+        new THREE.MeshLambertMaterial({ color: 0xf1c27d })
+      );
+      head.position.y = 2.05; head.castShadow = true;
+      group.add(body, head);
+      group.position.set(x, 0, z);
+      scene.add(group);
+      players.push({ mesh: group, homePos: new THREE.Vector3(x, 0, z), team, name });
+    }
+
+    createPlayer(-5, 0, 'home', 'STRIKER #10');
+    createPlayer(-12, -10, 'home', 'WINGER #7');
+    createPlayer(-12, 10, 'home', 'WINGER #11');
+    createPlayer(-25, -7, 'home', 'DEFENDER #4');
+    createPlayer(-25, 7, 'home', 'DEFENDER #5');
+
+    createPlayer(5, 0, 'away', 'CPU #9');
+    createPlayer(14, -11, 'away', 'CPU #8');
+    createPlayer(14, 11, 'away', 'CPU #6');
+    createPlayer(26, -7, 'away', 'CPU #2');
+    createPlayer(26, 7, 'away', 'CPU #3');
+
+    let activeIdx = 0, homeScore = 0, awayScore = 0, stamina = 100, matchSeconds = 0;
+    const keys = {};
+    window.addEventListener('keydown', e => {
+      keys[e.code] = true;
+      if (e.code === 'KeyQ') {
+        activeIdx = (activeIdx + 1) % 5;
+        document.getElementById('player-name').innerText = players[activeIdx].name;
+      }
+      if (e.code === 'Space' && players[activeIdx].mesh.position.distanceTo(ball.position) < 2.2) {
+        const dir = new THREE.Vector3().subVectors(ball.position, players[activeIdx].mesh.position).normalize();
+        dir.y = 0.25;
+        ballVel.copy(dir.multiplyScalar(0.85));
+      }
+    });
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    function resetPositions() {
+      ball.position.set(0, 0.45, 0); ballVel.set(0, 0, 0);
+      players.forEach(p => p.mesh.position.copy(p.homePos));
+    }
+
+    const rCtx = document.getElementById('radar').getContext('2d');
+    function drawRadar() {
+      rCtx.clearRect(0, 0, 180, 110);
+      rCtx.strokeStyle = 'rgba(255,255,255,0.3)'; rCtx.strokeRect(90, 0, 1, 110);
+      players.forEach((p, idx) => {
+        const rx = ((p.mesh.position.x + 40) / 80) * 180, rz = ((p.mesh.position.z + 25) / 50) * 110;
+        rCtx.fillStyle = idx === activeIdx ? '#22c55e' : (p.team === 'home' ? '#f43f5e' : '#3b82f6');
+        rCtx.beginPath(); rCtx.arc(rx, rz, 3.5, 0, Math.PI * 2); rCtx.fill();
+      });
+      const bx = ((ball.position.x + 40) / 80) * 180, bz = ((ball.position.z + 25) / 50) * 110;
+      rCtx.fillStyle = '#ffffff'; rCtx.beginPath(); rCtx.arc(bx, bz, 2.5, 0, Math.PI * 2); rCtx.fill();
+    }
+
+    setInterval(() => {
+      matchSeconds++;
+      const m = String(Math.floor(matchSeconds / 60)).padStart(2, '0');
+      const s = String(matchSeconds % 60).padStart(2, '0');
+      document.getElementById('timer').innerText = `${m}:${s}`;
+    }, 1000);
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const activePlayer = players[activeIdx].mesh;
+      const sprinting = keys['ShiftLeft'] && stamina > 5;
+      const speed = sprinting ? 0.26 : 0.16;
+
+      let moveX = 0, moveZ = 0;
+      if (keys['KeyW'] || keys['ArrowUp']) moveZ -= 1;
+      if (keys['KeyS'] || keys['ArrowDown']) moveZ += 1;
+      if (keys['KeyA'] || keys['ArrowLeft']) moveX -= 1;
+      if (keys['KeyD'] || keys['ArrowRight']) moveX += 1;
+
+      if (moveX !== 0 || moveZ !== 0) {
+        activePlayer.position.add(new THREE.Vector3(moveX, 0, moveZ).normalize().multiplyScalar(speed));
+        if (sprinting) stamina = Math.max(0, stamina - 0.4);
+      } else {
+        stamina = Math.min(100, stamina + 0.2);
+      }
+      document.getElementById('stamina-fill').style.width = stamina + '%';
+
+      marker.position.set(activePlayer.position.x, 3.1, activePlayer.position.z);
+      marker.rotation.y += 0.05;
+
+      players.forEach((p, idx) => {
+        if (idx === activeIdx) return;
+        const target = p.mesh.position.distanceTo(ball.position) < 16 ? ball.position : p.homePos;
+        const dir = new THREE.Vector3().subVectors(target, p.mesh.position); dir.y = 0;
+        if (dir.length() > 0.5) p.mesh.position.add(dir.normalize().multiplyScalar(p.team === 'away' ? 0.11 : 0.09));
+        if (p.mesh.position.distanceTo(ball.position) < 1.1) {
+          const push = new THREE.Vector3().subVectors(ball.position, p.mesh.position).normalize();
+          ballVel.x = push.x * 0.25; ballVel.z = push.z * 0.25;
+          if (p.team === 'away' && Math.random() < 0.03) ballVel.x = -0.65;
+        }
+      });
+
+      if (activePlayer.position.distanceTo(ball.position) < 1.1) {
+        const push = new THREE.Vector3().subVectors(ball.position, activePlayer.position).normalize();
+        ballVel.x = push.x * (speed * 1.4); ballVel.z = push.z * (speed * 1.4);
+      }
+
+      ball.position.add(ballVel); ballVel.multiplyScalar(0.96);
+      if (ball.position.y > 0.45) ballVel.y -= 0.02;
+      if (ball.position.y <= 0.45) { ball.position.y = 0.45; ballVel.y = 0; }
+
+      if (Math.abs(ball.position.z) < 4.5) {
+        if (ball.position.x > 38.5) { homeScore++; document.getElementById('score').innerText = `${homeScore} - ${awayScore}`; resetPositions(); }
+        else if (ball.position.x < -38.5) { awayScore++; document.getElementById('score').innerText = `${homeScore} - ${awayScore}`; resetPositions(); }
+      }
+
+      if (Math.abs(ball.position.x) > 38.5) ballVel.x *= -0.8;
+      if (Math.abs(ball.position.z) > 23.5) ballVel.z *= -0.8;
+
+      camera.position.lerp(new THREE.Vector3(ball.position.x * 0.65, 22, ball.position.z * 0.5 + 34), 0.08);
+      camera.lookAt(ball.position.x * 0.7, 0, ball.position.z * 0.4);
+      drawRadar();
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+    animate();
+  </script>
+</body>
+</html>
