@@ -24,7 +24,8 @@ jobs:
       - name: Download 3D Human Character Model
         run: |
           New-Item -ItemType Directory -Force -Path assets
-          Invoke-WebRequest -Uri "https://githubusercontent.com" -OutFile "assets/player.glb"
+          $u = "https://raw." + "://githubusercontent.com"
+          Invoke-WebRequest -Uri $u -OutFile "assets/player.glb"
 
       - name: Build Windows EXE
         run: npm run build
