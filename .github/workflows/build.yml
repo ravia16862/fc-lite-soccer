@@ -21,6 +21,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Download 3D Human Character Model
+        run: |
+          mkdir assets
+          curl -L -o assets/player.glb https://githubusercontent.com
+
       - name: Build Windows EXE
         run: npm run build
 
