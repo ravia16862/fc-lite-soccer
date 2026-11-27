@@ -50,8 +50,6 @@
   </div>
   <canvas id="radar" width="190" height="118"></canvas>
   <script src="node_modules/three/build/three.min.js"></script>
-  <script src="node_modules/three/examples/js/loaders/GLTFLoader.js"></script>
-  <script src="node_modules/three/examples/js/utils/SkeletonUtils.js"></script>
   <script>
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x93c5fd);
@@ -62,11 +60,10 @@
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.outputEncoding = THREE.sRGBEncoding;
     document.body.appendChild(renderer.domElement);
 
     scene.add(new THREE.HemisphereLight(0xffffff, 0x3f6212, 0.85));
-    const sun = new THREE.DirectionalLight(0xfffbeb, 1.1);
+    const sun = new THREE.DirectionalLight(0xfffbeb, 1.05);
     sun.position.set(35, 55, 25);
     sun.castShadow = true;
     sun.shadow.mapSize.width = 1024; sun.shadow.mapSize.height = 1024;
@@ -165,77 +162,78 @@
     );
     marker.rotation.x = Math.PI;
     scene.add(marker);
-    const players = [];
-    const clock = new THREE.Clock();
-
-    const loader = new THREE.GLTFLoader();
-    loader.load('assets/player.glb', (gltf) => {
-      const baseModel = gltf.scene;
-      const firstClip = gltf.animations.shift();
-
-      function spawn3DPlayer(x, z, team, num, role) {
-        const clone = THREE.SkeletonUtils.clone(baseModel);
-        clone.scale.set(1.6, 1.6, 1.6);
-
-        clone.traverse((child) => {
-          if (child.isMesh) {
-            child.castShadow = true;
-            child.material = child.material.clone();
-            child.material.color.setHex(team === 'home' ? 0xff4d4d : 0x4d94ff);
-          }
-        });
-
-        const wrapper = new THREE.Group();
-        clone.rotation.y = Math.PI / 2;
-        wrapper.add(clone);
-        wrapper.position.set(x, 0, z);
-        scene.add(wrapper);
-
-        const mixer = new THREE.AnimationMixer(clone);
-        const runAction = mixer.clipAction(firstClip);
-        runAction.play();
-        runAction.paused = true;
-
-        players.push({
-          mesh: wrapper,
-          mixer,
-          runAction,
-          homePos: new THREE.Vector3(x, 0, z),
-          team,
-          label: `#${num} ${role}`
-        });
-      }
-
-      spawn3DPlayer(-4, 0, 'home', '10', 'STRIKER');
-      spawn3DPlayer(-10, -13, 'home', '7', 'LEFT WING');
-      spawn3DPlayer(-10, 13, 'home', '11', 'RIGHT WING');
-      spawn3DPlayer(-17, 0, 'home', '8', 'MIDFIELDER');
-      spawn3DPlayer(-26, -9, 'home', '4', 'DEFENDER');
-      spawn3DPlayer(-26, 9, 'home', '5', 'DEFENDER');
-      spawn3DPlayer(-37, 0, 'home', '1', 'GOALKEEPER');
-
-      spawn3DPlayer(4, 0, 'away', '9', 'CPU');
-      spawn3DPlayer(11, -13, 'away', '7', 'CPU');
-      spawn3DPlayer(11, 13, 'away', '11', 'CPU');
-      spawn3DPlayer(18, 0, 'away', '6', 'CPU');
-      spawn3DPlayer(27, -9, 'away', '2', 'CPU');
-      spawn3DPlayer(27, 9, 'away', '3', 'CPU');
-      spawn3DPlayer(37, 0, 'away', '1', 'GK');
-    });
-
-    function setPlayerAnim(p, running) {
-      p.runAction.paused = !running;
+    function createJerseyTexture(hexColor, numText) {
+      const c = document.createElement('canvas');
+      c.width = 128; c.height = 128;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = hexColor; ctx.fillRect(0, 0, 128, 128);
+      ctx.fillStyle = '#ffffff'; ctx.font = 'bold 48px Arial'; ctx.textAlign = 'center';
+      ctx.fillText(numText, 64, 78);
+      return new THREE.CanvasTexture(c);
     }
+
+    const players = [];
+    function createPlayer(x, z, team, num, role) {
+      const g = new THREE.Group();
+      const kitHex = team === 'home' ? '#dc2626' : '#2563eb';
+      const skinMat = new THREE.MeshStandardMaterial({ color: 0xe0ac69, roughness: 0.6 });
+      const kitMat = new THREE.MeshStandardMaterial({ map: createJerseyTexture(kitHex, num), roughness: 0.5 });
+      const shortMat = new THREE.MeshStandardMaterial({ color: team === 'home' ? 0xffffff : 0x1e3a8a, roughness: 0.5 });
+      const sockMat = new THREE.MeshStandardMaterial({ color: team === 'home' ? 0xdc2626 : 0x2563eb, roughness: 0.5 });
+      const hairMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
+
+      const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.32, 0.9, 14), kitMat);
+      torso.position.y = 1.45; torso.castShadow = true;
+
+      const shorts = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.35, 0.4, 14), shortMat);
+      shorts.position.y = 0.85; shorts.castShadow = true;
+
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.27, 14, 14), skinMat);
+      head.position.y = 2.16; head.castShadow = true;
+      const hair = new THREE.Mesh(new THREE.SphereGeometry(0.28, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), hairMat);
+      hair.position.y = 2.2;
+
+      const leftLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.1, 0.75, 10), sockMat);
+      leftLeg.position.set(-0.18, 0.38, 0); leftLeg.castShadow = true;
+      const rightLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.1, 0.75, 10), sockMat);
+      rightLeg.position.set(0.18, 0.38, 0); rightLeg.castShadow = true;
+
+      const leftArm = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.08, 0.7, 10), skinMat);
+      leftArm.position.set(-0.46, 1.45, 0);
+      const rightArm = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.08, 0.7, 10), skinMat);
+      rightArm.position.set(0.46, 1.45, 0);
+
+      g.add(torso, shorts, head, hair, leftLeg, rightLeg, leftArm, rightArm);
+      g.position.set(x, 0, z);
+      scene.add(g);
+      players.push({ mesh: g, leftLeg, rightLeg, leftArm, rightArm, homePos: new THREE.Vector3(x, 0, z), team, label: `#${num} ${role}`, phase: Math.random() * 6 });
+    }
+
+    createPlayer(-4, 0, 'home', '10', 'STRIKER');
+    createPlayer(-10, -13, 'home', '7', 'LEFT WING');
+    createPlayer(-10, 13, 'home', '11', 'RIGHT WING');
+    createPlayer(-17, 0, 'home', '8', 'MIDFIELDER');
+    createPlayer(-26, -9, 'home', '4', 'DEFENDER');
+    createPlayer(-26, 9, 'home', '5', 'DEFENDER');
+    createPlayer(-37, 0, 'home', '1', 'GOALKEEPER');
+
+    createPlayer(4, 0, 'away', '9', 'CPU');
+    createPlayer(11, -13, 'away', '7', 'CPU');
+    createPlayer(11, 13, 'away', '11', 'CPU');
+    createPlayer(18, 0, 'away', '6', 'CPU');
+    createPlayer(27, -9, 'away', '2', 'CPU');
+    createPlayer(27, 9, 'away', '3', 'CPU');
+    createPlayer(37, 0, 'away', '1', 'GK');
 
     let activeIdx = 0, homeScore = 0, awayScore = 0, stamina = 100, matchSeconds = 0;
     const keys = {};
     window.addEventListener('keydown', e => {
       keys[e.code] = true;
-      if (e.code === 'KeyQ' && players.length > 0) {
+      if (e.code === 'KeyQ') {
         activeIdx = (activeIdx + 1) % 6;
         document.getElementById('player-name').innerText = players[activeIdx].label;
       }
-      if (e.code === 'Space' && players.length > 0 && players[activeIdx].mesh.position.distanceTo(ball.position) < 2.3) {
+      if (e.code === 'Space' && players[activeIdx].mesh.position.distanceTo(ball.position) < 2.3) {
         const dir = new THREE.Vector3().subVectors(ball.position, players[activeIdx].mesh.position).normalize();
         dir.y = 0.22;
         ballVel.copy(dir.multiplyScalar(0.9));
@@ -274,68 +272,76 @@
       document.getElementById('timer').innerText = `${m}:${s}`;
     }, 1000);
 
+    function animateLimbs(p, moving) {
+      if (moving) {
+        p.phase += 0.25;
+        p.leftLeg.rotation.x = Math.sin(p.phase) * 0.65;
+        p.rightLeg.rotation.x = -Math.sin(p.phase) * 0.65;
+        p.leftArm.rotation.x = -Math.sin(p.phase) * 0.45;
+        p.rightArm.rotation.x = Math.sin(p.phase) * 0.45;
+      } else {
+        p.leftLeg.rotation.x = 0; p.rightLeg.rotation.x = 0;
+        p.leftArm.rotation.x = 0; p.rightArm.rotation.x = 0;
+      }
+    }
+
     function animate() {
       requestAnimationFrame(animate);
-      const delta = clock.getDelta();
-      players.forEach(p => p.mixer.update(delta));
+      const activeObj = players[activeIdx];
+      const activePlayer = activeObj.mesh;
+      const sprinting = keys['ShiftLeft'] && stamina > 5;
+      const speed = sprinting ? 0.27 : 0.17;
 
-      if (players.length > 0) {
-        const activeObj = players[activeIdx];
-        const activePlayer = activeObj.mesh;
-        const sprinting = keys['ShiftLeft'] && stamina > 5;
-        const speed = sprinting ? 0.27 : 0.17;
+      let moveX = 0, moveZ = 0;
+      if (keys['KeyW'] || keys['ArrowUp']) moveZ -= 1;
+      if (keys['KeyS'] || keys['ArrowDown']) moveZ += 1;
+      if (keys['KeyA'] || keys['ArrowLeft']) moveX -= 1;
+      if (keys['KeyD'] || keys['ArrowRight']) moveX += 1;
 
-        let moveX = 0, moveZ = 0;
-        if (keys['KeyW'] || keys['ArrowUp']) moveZ -= 1;
-        if (keys['KeyS'] || keys['ArrowDown']) moveZ += 1;
-        if (keys['KeyA'] || keys['ArrowLeft']) moveX -= 1;
-        if (keys['KeyD'] || keys['ArrowRight']) moveX += 1;
+      if (moveX !== 0 || moveZ !== 0) {
+        const moveVec = new THREE.Vector3(moveX, 0, moveZ).normalize().multiplyScalar(speed);
+        activePlayer.position.add(moveVec);
+        activePlayer.rotation.y = Math.atan2(moveX, moveZ);
+        animateLimbs(activeObj, true);
+        if (sprinting) stamina = Math.max(0, stamina - 0.35);
+      } else {
+        animateLimbs(activeObj, false);
+        stamina = Math.min(100, stamina + 0.25);
+      }
+      document.getElementById('stamina-fill').style.width = stamina + '%';
 
-        if (moveX !== 0 || moveZ !== 0) {
-          const moveVec = new THREE.Vector3(moveX, 0, moveZ).normalize().multiplyScalar(speed);
-          activePlayer.position.add(moveVec);
-          activePlayer.rotation.y = Math.atan2(moveX, moveZ);
-          setPlayerAnim(activeObj, true);
-          if (sprinting) stamina = Math.max(0, stamina - 0.35);
+      marker.position.set(activePlayer.position.x, 3.0, activePlayer.position.z);
+      marker.rotation.y += 0.05;
+
+      players.forEach((p, idx) => {
+        if (idx === activeIdx) return;
+        const isGK = p.label.includes('GK') || p.label.includes('GOALKEEPER');
+        let target = p.homePos.clone();
+        if (isGK) {
+          target.z = THREE.MathUtils.clamp(ball.position.z, -4.2, 4.2);
+        } else if (p.mesh.position.distanceTo(ball.position) < 18) {
+          target = ball.position;
+        }
+        const dir = new THREE.Vector3().subVectors(target, p.mesh.position); dir.y = 0;
+        if (dir.length() > 0.4) {
+          p.mesh.position.add(dir.clone().normalize().multiplyScalar(p.team === 'away' ? 0.12 : 0.1));
+          p.mesh.rotation.y = Math.atan2(dir.x, dir.z);
+          animateLimbs(p, true);
         } else {
-          setPlayerAnim(activeObj, false);
-          stamina = Math.min(100, stamina + 0.25);
+          animateLimbs(p, false);
         }
-        document.getElementById('stamina-fill').style.width = stamina + '%';
 
-        marker.position.set(activePlayer.position.x, 3.1, activePlayer.position.z);
-        marker.rotation.y += 0.05;
-
-        players.forEach((p, idx) => {
-          if (idx === activeIdx) return;
-          const isGK = p.label.includes('GK') || p.label.includes('GOALKEEPER');
-          let target = p.homePos.clone();
-          if (isGK) {
-            target.z = THREE.MathUtils.clamp(ball.position.z, -4.2, 4.2);
-          } else if (p.mesh.position.distanceTo(ball.position) < 18) {
-            target = ball.position;
-          }
-          const dir = new THREE.Vector3().subVectors(target, p.mesh.position); dir.y = 0;
-          if (dir.length() > 0.4) {
-            p.mesh.position.add(dir.clone().normalize().multiplyScalar(p.team === 'away' ? 0.12 : 0.1));
-            p.mesh.rotation.y = Math.atan2(dir.x, dir.z);
-            setPlayerAnim(p, true);
-          } else {
-            setPlayerAnim(p, false);
-          }
-
-          if (p.mesh.position.distanceTo(ball.position) < 1.15) {
-            const push = new THREE.Vector3().subVectors(ball.position, p.mesh.position).normalize();
-            ballVel.x = push.x * (isGK ? 0.75 : 0.28);
-            ballVel.z = push.z * (isGK ? 0.4 : 0.28);
-            if (p.team === 'away' && !isGK && Math.random() < 0.03) ballVel.x = -0.7;
-          }
-        });
-
-        if (activePlayer.position.distanceTo(ball.position) < 1.15) {
-          const push = new THREE.Vector3().subVectors(ball.position, activePlayer.position).normalize();
-          ballVel.x = push.x * (speed * 1.45); ballVel.z = push.z * (speed * 1.45);
+        if (p.mesh.position.distanceTo(ball.position) < 1.15) {
+          const push = new THREE.Vector3().subVectors(ball.position, p.mesh.position).normalize();
+          ballVel.x = push.x * (isGK ? 0.75 : 0.28);
+          ballVel.z = push.z * (isGK ? 0.4 : 0.28);
+          if (p.team === 'away' && !isGK && Math.random() < 0.03) ballVel.x = -0.7;
         }
+      });
+
+      if (activePlayer.position.distanceTo(ball.position) < 1.15) {
+        const push = new THREE.Vector3().subVectors(ball.position, activePlayer.position).normalize();
+        ballVel.x = push.x * (speed * 1.45); ballVel.z = push.z * (speed * 1.45);
       }
 
       ball.position.add(ballVel); ballVel.multiplyScalar(0.96);
