@@ -171,7 +171,7 @@
     const loader = new THREE.GLTFLoader();
     loader.load('assets/player.glb', (gltf) => {
       const baseModel = gltf.scene;
-      const animations = gltf.animations;
+      const firstClip = gltf.animations.shift();
 
       function spawn3DPlayer(x, z, team, num, role) {
         const clone = THREE.SkeletonUtils.clone(baseModel);
@@ -192,7 +192,7 @@
         scene.add(wrapper);
 
         const mixer = new THREE.AnimationMixer(clone);
-        const runAction = mixer.clipAction(animations[0]);
+        const runAction = mixer.clipAction(firstClip);
         runAction.play();
         runAction.paused = true;
 
