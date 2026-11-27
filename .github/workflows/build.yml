@@ -21,10 +21,10 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Copy 3D Human Character Model
+      - name: Download 3D Human Character Model
         run: |
           New-Item -ItemType Directory -Force -Path assets
-          Copy-Item "node_modules/three/examples/models/gltf/Soldier.glb" -Destination "assets/player.glb"
+          Invoke-WebRequest -Uri "https://githubusercontent.com" -OutFile "assets/player.glb"
 
       - name: Build Windows EXE
         run: npm run build
@@ -34,4 +34,3 @@ jobs:
         with:
           name: FC-Lite-Soccer-Windows
           path: dist/win-unpacked/
-
